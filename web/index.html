@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Local English Meeting Copilot</title>
+<link rel="stylesheet" href="/static/styles.css?v=20260813c" />
+</head>
+<body>
+
+<div id="consent-overlay" class="overlay">
+  <div class="overlay-card">
+    <h2>Confirmação antes de começar</h2>
+    <p>
+      Este aplicativo processa localmente áudio de uma reunião.
+      Confirme que o uso é permitido pelas políticas da empresa e que
+      os participantes foram informados quando isso for exigido pela
+      legislação ou pelas regras internas.
+    </p>
+    <p class="privacy-note">
+      Nenhum áudio é salvo. Nada é enviado para serviços externos.
+      A interface só é acessível em 127.0.0.1 (este computador).
+    </p>
+    <p id="learning-consent-note" class="privacy-note privacy-note-warning hidden">
+      Este app está configurado para salvar a tradução em português e um
+      resumo da conversa em um arquivo markdown local
+      (<code>data/sessions/</code>), inclusive em reuniões reais. Nada sai
+      desta máquina, mas confirme se isso é permitido antes de continuar.
+    </p>
+    <div class="overlay-actions">
+      <button id="consent-cancel" class="btn btn-secondary">Cancelar</button>
+      <button id="consent-confirm" class="btn btn-primary">Confirmo, pode começar</button>
+    </div>
+  </div>
+</div>
+
+<div id="delete-overlay" class="overlay hidden">
+  <div class="overlay-card">
+    <h2>Apagar sessão?</h2>
+    <p>Isso remove a transcrição recente, o resumo acumulado e a memória aprovada desta sessão da memória do aplicativo. Nenhum áudio é salvo, então não há nada além disso para apagar.</p>
+    <div class="overlay-actions">
+      <button id="delete-cancel" class="btn btn-secondary">Cancelar</button>
+      <button id="delete-confirm" class="btn btn-danger">Apagar sessão</button>
+    </div>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="topbar-title">
+    <span class="app-name">Local English Meeting Copilot</span>
+    <span id="offline-badge" class="badge badge-local">● LOCAL</span>
+  </div>
+
+  <div class="topbar-status">
+    <span id="listening-indicator" class="listening-indicator hidden">OUVINDO</span>
+    <span id="status-timer" class="status-timer">00:00:00</span>
+    <!-- Only ever shown when something's actually broken (whisper/whisper-pt/
+         ollama in an "error" tone) -- see updateHealthWarning() in app.js.
+         Healthy status is not something the user needs to see permanently;
+         see docs/DECISIONS.md, 2026-08-13 redesign entry. -->
+    <span id="health-warning" class="health-warning hidden"></span>
+  </div>
+
+  <div class="topbar-actions">
+    <button id="start-btn" class="btn btn-primary">Iniciar escuta</button>
+    <button id="stop-btn" class="btn btn-secondary hidden">Parar</button>
+    <button id="menu-toggle" type="button" class="btn btn-ghost icon-btn menu-toggle" aria-haspopup="true" aria-expanded="false" title="Mais opções">•••</button>
+  </div>
+
+  <div id="overflow-menu" class="overflow-menu hidden">
+    <button id="prepare-meeting-btn" type="button" class="overflow-item">📋 Preparar reunião</button>
+    <button id="language-coach-drawer-toggle" type="button" class="overflow-item">
+      🎓 Language Coach
+      <span id="coach-review-badge" class="badge-count hidden">0</span>
+    </button>
+    <div class="overflow-divider"></div>
+    <div class="overflow-item audio-device-picker">
+      <span class="panel-sub">Microfone</span>
+      <select id="audio-device-select"><option value="">(padrão do sistema)</option></select>
+    </div>
+    <div class="overflow-divider"></div>
+    <div class="overflow-status-list">
+      <span class="status-item"><i class="status-dot" data-tone="neutral"></i>Mic <strong id="status-mic">unknown</strong></span>
+      <span class="status-item"><i class="status-dot" data-tone="neutral"></i>Whisper <strong id="status-whisper">stopped</strong></span>
+      <span class="status-item"><i class="status-dot" data-tone="neutral"></i>Whisper PT <strong id="status-whisper-pt">disabled</strong></span>
+      <span class="status-item"><i class="status-dot" data-tone="neutral"></i>Ollama <strong id="status-ollama">unknown</strong></span>
+    </div>
+    <div class="overflow-divider"></div>
+    <span id="learning-badge" class="overflow-item-static badge-recording hidden">🔴 Salvando tradução + resumo localmente</span>
+    <button id="delete-btn" type="button" class="overflow-item overflow-item-danger">🗑 Apagar sessão</button>
+  </div>
+</header>
+
+<main class="layout">
+  <div class="workspace">
+    <section class="panel conversation-column">
+      <h3>CONVERSA AO VIVO <span class="panel-sub">inglês ouvido + tradução PT-BR, juntas</span></h3>
+      <div id="transcript" class="scroll-area conversation-timeline">
+        <p class="feed-empty-hint">Nada ouvido ainda.</p>
+      </div>
+      <div id="question-badge" class="badge badge-question hidden">Possível pergunta para você</div>
+      <button type="button" id="noticing-badge" class="badge badge-noticing hidden"></button>
+    </section>
+
+    <div id="resize-handle-workspace" class="resize-handle resize-handle-column" title="Arraste para redimensionar -- duplo clique para restaurar"></div>
+
+    <section class="panel assistant-column">
+      <h3>ASSISTENTE</h3>
+
+      <div class="respond-now-block">
+        <h4>RESPONDER AGORA</h4>
+        <div id="response-feed" class="scroll-area response-feed">
+          <p class="feed-empty-hint">Nenhuma ação executada ainda. Use a barra abaixo.</p>
+        </div>
+      </div>
+
+      <div class="pt-live-compact">
+        <div class="pt-live-compact-header">
+          <h4>🎙️ Você disse (PT → EN)</h4>
+          <button type="button" id="pt-live-pause-btn" class="btn btn-tiny pt-live-pause-btn">Pausar</button>
+        </div>
+        <div class="pt-live-columns">
+          <div class="pt-live-column">
+            <span class="pt-live-column-label">🇧🇷 Ouvido</span>
+            <div id="pt-live-heard" class="pt-live-heard-feed">
+              <p class="feed-empty-hint">Nada ouvido ainda.</p>
+            </div>
+          </div>
+          <div class="pt-live-column">
+            <span class="pt-live-column-label">🇺🇸 Traduzido</span>
+            <div id="pt-live-translated" class="pt-live-compact-feed">
+              <p class="feed-empty-hint">Fale em português a qualquer momento -- a versão em inglês aparece aqui.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="idea-box-inline">
+        <label for="idea-input">
+          Quero dizer...
+          <span class="panel-sub">português ou inglês -- detectado automaticamente</span>
+        </label>
+        <div class="idea-row">
+          <input id="idea-input" type="text" placeholder="Ex.: quero dizer que concordamos, mas falta definir o retry" />
+          <button id="idea-submit" class="btn btn-primary">Transformar →</button>
+        </div>
+        <div id="idea-translation-result" class="idea-translation-result hidden">
+          <p class="idea-translation-text"></p>
+          <button type="button" id="idea-translation-speak-btn" class="btn btn-ghost">🔊 Ouvir</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <nav class="context-actions-bar">
+    <button type="button" class="action-btn" data-action="suggest-answer" data-tooltip="Receba uma resposta curta em inglês pra usar agora">Responder</button>
+    <button type="button" class="action-btn" data-action="suggest-question" data-tooltip="Receba uma pergunta técnica relevante em inglês">Perguntar</button>
+    <button type="button" class="action-btn" data-action="disagree-politely" data-tooltip="Uma forma educada de discordar em inglês">Discordar</button>
+    <button type="button" class="action-btn" data-action="request-clarification" data-tooltip="Peça pra reformularem o que disseram">Clarificar</button>
+    <button type="button" id="more-actions-toggle" class="btn btn-ghost more-actions-toggle" aria-haspopup="true" aria-expanded="false">•••</button>
+    <div id="more-actions-menu" class="more-actions-menu hidden">
+      <button type="button" class="action-btn" data-action="explain-context" data-tooltip="Entenda o que está sendo discutido agora, em português">Contexto</button>
+      <button type="button" class="action-btn" data-action="confirm-understanding" data-tooltip="Confirme que você entendeu a proposta">Confirmar</button>
+      <button type="button" class="action-btn" data-action="explain-english" data-tooltip="Veja como a frase sugerida foi construída">🎓 Aprender esta frase</button>
+    </div>
+  </nav>
+</main>
+
+<div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+<div id="language-coach-drawer" class="drawer hidden" aria-hidden="true">
+  <div class="drawer-header">
+    <h3>🎓 LANGUAGE COACH</h3>
+    <button type="button" id="language-coach-drawer-close" class="icon-btn" title="Fechar">✕</button>
+  </div>
+  <p class="panel-sub drawer-subtitle">tire dúvidas de inglês sobre o que você acabou de ouvir</p>
+
+  <div class="language-coach-ask-row">
+    <input id="language-coach-input" type="text" placeholder='Pergunte sobre inglês... (ex.: por que "have to" e não "must"?)' />
+    <button id="language-coach-ask-btn" class="btn btn-primary">Perguntar</button>
+  </div>
+  <div class="language-coach-review-row">
+    <button id="language-coach-review-btn" class="btn btn-ghost">
+      Revisar <span id="language-coach-review-count" class="badge-count hidden">0</span>
+    </button>
+  </div>
+  <div id="language-coach-review-panel" class="language-coach-review-panel hidden">
+    <p id="language-coach-review-empty" class="feed-empty-hint hidden">Nada para revisar agora.</p>
+    <div id="language-coach-review-card" class="lc-review-card hidden">
+      <span id="language-coach-review-anchor" class="lc-visual-anchor hidden"></span>
+      <p class="lc-review-context"></p>
+      <p class="lc-review-chunk hidden"></p>
+      <button id="language-coach-review-reveal" class="btn btn-ghost">Revelar</button>
+      <div id="language-coach-review-actions" class="lc-review-actions hidden">
+        <button id="language-coach-review-recalled" class="btn btn-primary">Lembrei</button>
+        <button id="language-coach-review-forgot" class="btn btn-secondary">Não lembrei</button>
+      </div>
+      <p id="language-coach-review-feedback" class="lc-review-feedback hidden"></p>
+    </div>
+  </div>
+  <div id="language-coach-feed" class="scroll-area language-coach-feed">
+    <p class="feed-empty-hint">Nenhuma pergunta ainda. Clique no "?" de uma frase transcrita ou digite uma pergunta acima.</p>
+  </div>
+</div>
+
+<div id="prepare-meeting-modal" class="overlay hidden">
+  <div class="overlay-card wide">
+    <h2>Preparar reunião</h2>
+    <form id="meeting-form">
+      <label>Título<input name="title" type="text" /></label>
+      <label>Objetivo<input name="objective" type="text" /></label>
+      <label>Agenda (uma por linha)<textarea name="agenda" rows="3"></textarea></label>
+      <label>Tópicos esperados (uma por linha)<textarea name="expected_topics" rows="3"></textarea></label>
+      <label>Sistemas conhecidos (uma por linha)<textarea name="known_systems" rows="2"></textarea></label>
+      <label>Siglas conhecidas (uma por linha)<textarea name="known_acronyms" rows="2"></textarea></label>
+      <label>Resultado desejado<input name="desired_outcome" type="text" /></label>
+      <label>Notas<textarea name="notes" rows="2"></textarea></label>
+      <div class="overlay-actions">
+        <button type="button" id="meeting-cancel" class="btn btn-secondary">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Salvar para esta sessão</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<template id="response-card-template">
+  <article class="response-card" data-state="loading">
+    <header class="response-card-header">
+      <span class="response-card-action"></span>
+      <span class="response-card-time"></span>
+      <span class="response-card-status">carregando...</span>
+    </header>
+    <div class="response-card-spinner">⏳ Processando no modelo local -- pode levar até 90s neste hardware.</div>
+    <div class="response-card-content hidden">
+      <!-- Immediate layer: what you need to say/know right now. Progressive
+           disclosure (docs/DECISIONS.md, 2026-08-13 redesign) -- everything
+           below still exists, it's just not shown before it's needed. -->
+      <div class="response-card-immediate">
+        <div class="insufficient-context-warning hidden">⚠ Contexto insuficiente</div>
+        <div class="context-pt"></div>
+        <p class="suggestion-text suggested-answer"></p>
+        <p class="suggestion-opening simple-opening"></p>
+        <p class="suggestion-text suggested-question"></p>
+        <div class="response-card-cta-row">
+          <button type="button" class="btn btn-primary card-speak-btn hidden">▶ Ouvir e repetir</button>
+          <button class="btn btn-ghost copy-btn">Copiar</button>
+        </div>
+      </div>
+      <details class="response-card-why">
+        <summary>Por que esta resposta?</summary>
+        <div class="grammar-note hidden"></div>
+        <details class="response-card-details key-vocab-details hidden">
+          <summary>Vocabulário-chave</summary>
+          <ul class="key-vocabulary"></ul>
+        </details>
+        <details class="response-card-details evidence-details hidden">
+          <summary>Evidências do transcript usadas</summary>
+          <ul class="evidence-list"></ul>
+        </details>
+        <div class="confidence"></div>
+        <div class="processing-load hidden"></div>
+        <span class="feedback-buttons">
+          <button class="btn btn-tiny" data-rating="useful">Útil</button>
+          <button class="btn btn-tiny" data-rating="too_long">Longa demais</button>
+          <button class="btn btn-tiny" data-rating="difficult_to_pronounce">Difícil de pronunciar</button>
+          <button class="btn btn-tiny" data-rating="out_of_context">Fora do contexto</button>
+          <button class="btn btn-tiny" data-rating="incorrect">Incorreta</button>
+        </span>
+      </details>
+    </div>
+    <div class="response-card-error hidden"></div>
+  </article>
+</template>
+
+<template id="language-coach-card-template">
+  <article class="response-card lc-card" data-state="loading">
+    <header class="response-card-header">
+      <span class="response-card-action lc-card-kind"></span>
+      <span class="response-card-time"></span>
+      <span class="response-card-status">carregando...</span>
+    </header>
+    <div class="response-card-spinner">⏳ Processando no modelo local -- pode levar até 90s neste hardware.</div>
+    <!-- Retrieval-practice-first (Roediger & Karpicke; pedagogy theory #2/
+         #10) -- shown BEFORE the real explanation for any card that started
+         from a specific heard sentence ("?" click, noticing-flag click):
+         asks what you think it means first, so looking it up is preceded by
+         a genuine retrieval attempt instead of jumping straight to the
+         answer. A typed free-form question has no single "guess this"
+         target, so it skips straight past this (see askLanguageCoach). -->
+    <div class="lc-retrieval-prompt hidden">
+      <p class="lc-retrieval-sentence"></p>
+      <p class="lc-retrieval-question">O que você acha que essa frase quer dizer, ou o que tem de diferente nela?</p>
+      <input type="text" class="lc-retrieval-input" placeholder="Sua resposta (opcional, não é avaliada)" />
+      <div class="lc-retrieval-actions">
+        <button type="button" class="btn btn-primary lc-retrieval-submit">Ver explicação</button>
+        <button type="button" class="btn btn-ghost lc-retrieval-skip">Não sei</button>
+      </div>
+    </div>
+    <div class="response-card-content hidden">
+      <span class="lc-visual-anchor hidden"></span>
+      <div class="lc-source-sentence hidden"></div>
+      <div class="lc-phonetic-respelling hidden"></div>
+      <div class="lc-stress-note hidden"></div>
+      <div class="lc-explanation hidden"></div>
+      <div class="lc-native-reasoning hidden"></div>
+      <div class="lc-idiomatic-chunk hidden"></div>
+      <details class="response-card-details lc-examples-details hidden">
+        <summary>Outros exemplos</summary>
+        <ul class="lc-examples"></ul>
+      </details>
+      <div class="lc-scenario-pt hidden"></div>
+      <div class="lc-scenario-prompt hidden"></div>
+      <div class="lc-follow-up hidden"></div>
+      <div class="processing-load hidden"></div>
+      <div class="response-card-toolbar">
+        <button type="button" class="btn btn-primary lc-speak-btn hidden">▶ Ouvir e repetir</button>
+        <button type="button" class="btn btn-ghost lc-add-review-btn hidden">＋ Revisar depois</button>
+        <button type="button" class="btn btn-ghost lc-scenario-btn hidden">Praticar num cenário</button>
+        <button type="button" class="btn btn-ghost lc-record-btn hidden">🎙️ Gravar tentativa</button>
+      </div>
+      <p class="lc-pronunciation-status hidden"></p>
+      <div class="lc-pronunciation-feedback hidden">
+        <p class="lc-pronunciation-heard"></p>
+        <p class="lc-pronunciation-specific"></p>
+        <p class="lc-pronunciation-encouragement"></p>
+      </div>
+      <p class="lc-pronunciation-error hidden"></p>
+    </div>
+    <div class="response-card-error hidden"></div>
+  </article>
+</template>
+
+<script src="/static/vendor/anime.umd.min.js"></script>
+<script src="/static/motion.js?v=20260723c"></script>
+<script src="/static/audio_utils.js?v=20260723c"></script>
+<script src="/static/visual_anchors.js?v=20260723c"></script>
+<script src="/static/app.js?v=20260813c"></script>
+<script src="/static/language_coach.js?v=20260813c"></script>
+<script src="/static/resize.js?v=20260813c"></script>
+<script src="/static/ui.js?v=20260813c"></script>
+</body>
+</html>

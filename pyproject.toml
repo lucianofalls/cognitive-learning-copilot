@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meeting-copilot"
+version = "0.1.0"
+description = "Local, offline-first English meeting copilot (whisper.cpp + Ollama)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Private / internal use" }
+
+dependencies = [
+  "fastapi>=0.111,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+  "httpx>=0.27,<1.0",
+  "pydantic>=2.7,<3.0",
+  "pydantic-settings>=2.3,<3.0",
+  "PyYAML>=6.0,<7.0",
+  "psutil>=5.9,<6.0",
+  # Required by FastAPI itself to parse multipart/form-data (Language
+  # Coach's pronunciation-check upload, api/language_coach.py). Not an
+  # ML/AI dependency -- a small, dependency-free form-parsing library
+  # FastAPI's own docs point to for this exact case.
+  "python-multipart>=0.0.9,<1.0",
+  # Dedicated local NMT for the live PT-BR translation stream, not the
+  # coach actions. Deliberately not an LLM: see docs/DECISIONS.md
+  # 2026-07-20 -- an Ollama LLM (any size tried) is the wrong tool for
+  # continuous translation (slow, and the small model tried was
+  # unreliable); a purpose-built offline NMT model (same category as
+  # Google/Apple's on-device translation, CTranslate2-backed) is both
+  # ~1000x faster warm and needs no schema/reliability workarounds.
+  "argostranslate>=1.11,<2.0",
+  # CMU Pronouncing Dictionary lookup for the "how does this actually
+  # sound" pronunciation guide (context/pronunciation_guide.py) --
+  # deterministic, offline, no model download. Replaced an LLM-based
+  # version reverted 2026-07-22 for hallucinating wrong respellings
+  # (see docs/DECISIONS.md).
+  "pronouncing>=0.3.0,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<9.0",
+  "pytest-asyncio>=0.23,<1.0",
+  "pytest-cov>=5.0,<6.0",
+]
+
+[project.scripts]
+meeting-copilot = "meeting_copilot.main:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

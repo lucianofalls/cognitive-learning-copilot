@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.DS_Store
+
+# Your real name/role/expertise -- copy config/profile.example.yaml to
+# config/profile.yaml and fill in your own details, never commit it.
+config/profile.yaml
+config/settings.yaml.bak*
+
+# Never commit anything that might contain session content.
+*.wav
+*.session.json
+approved_memory.json
+
+# Opt-in local persistence (privacy.persist_learning_notes) -- PT-BR
+# translation + meeting summary markdown files. Never commit these.
+data/sessions/
+
+# Same gate (privacy.persist_learning_notes) -- Language Coach spaced-
+# repetition items, which include a verbatim English context sentence.
+data/learning_items/

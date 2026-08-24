@@ -1,0 +1,126 @@
+server:
+  host: "127.0.0.1"
+  port: 8000
+
+privacy:
+  persist_audio: false
+  persist_transcript: false
+  persist_summary: false
+  # Opt-in only. If enabled, appends the PT-BR translation stream +
+  # derived summary to a local markdown file under data/sessions/,
+  # applying to every session including real work meetings. Never
+  # touches raw audio or the raw English transcript, and never leaves
+  # this machine either way. Read what this actually means for your own
+  # use (and your employer's policies, if this is a work meeting) before
+  # flipping it on -- see PrivacySettings in src/meeting_copilot/config.py.
+  persist_learning_notes: false
+  redact_logs: true
+  allow_external_network: false
+
+whisper:
+  repository_path: "~/Developer/whisper.cpp"
+  binary_path: "~/Developer/whisper.cpp/build/bin/whisper-stream"
+  # CHANGED 2026-08-22: small.en (487MB) -> base.en (142MB). Measured
+  # live with real continuous speech (transcript_line_ready logging):
+  # gap_since_last_line_ms averaged ~3006ms/max 5873ms on a clean
+  # continuous-speech sample -- essentially tied with small.en's
+  # documented 3131ms/8999ms, not worse. Kept as the default on that
+  # basis. NOT independently re-verified against real technical-meeting
+  # vocabulary accuracy (WER) -- base.en is a real, known accuracy
+  # trade-off vs. small.en, not just a smaller file, and that side
+  # wasn't confirmed either way in this pass. small.en is still
+  # downloaded (not deleted) -- revert model_path to
+  # ggml-small.en.bin if transcription errors become noticeable in
+  # real use.
+  model_path: "~/Developer/whisper.cpp/models/ggml-base.en.bin"
+  language: "en"
+  threads: 4
+  # 500ms forced a full re-inference over the 5s window every half-second
+  # -- 10x the compute of whisper.cpp's own default (3000ms). Measured
+  # empirically: with 500ms, gaps between committed transcript lines
+  # ranged 5.4s-14.2s instead of holding steady near the 5s window size,
+  # meaning whisper-stream was falling behind real-time on this hardware
+  # while sharing it with Ollama. 3000ms matches whisper.cpp's default.
+  # EXPERIMENT 2026-08-22, result logged here so it isn't retried blind:
+  # tried 1500ms (2x whisper.cpp's default compute -- well short of the
+  # 500ms/10x that already failed once). Measured live with real speech,
+  # same transcript_line_ready logging as the original 500ms study:
+  # gap_since_last_line_ms averaged 7782ms over 13 lines, max 29110ms --
+  # WORSE than both 3000ms (mean 3131ms, max 8999ms over 366 samples)
+  # AND the already-rejected 500ms (5.4s-14.2s range). This M2 cannot
+  # sustain a re-inference cadence faster than whisper.cpp's own 3000ms
+  # default while sharing the CPU with Ollama -- confirmed a second time,
+  # from a different starting point. Don't retry an intermediate value
+  # without a real hardware/setup change (e.g. Ollama not running
+  # concurrently) -- the failure mode is the same falling-behind pattern
+  # both times, not noise.
+  step_ms: 3000
+  length_ms: 5000
+  rolling_window_seconds: 90
+  capture_device: -1
+  # Multilingual model for the "Falar em português" reverse pipeline
+  # (both the one-shot button and the continuous stream below). Download:
+  # cd ~/Developer/whisper.cpp && sh ./models/download-ggml-model.sh small
+  multilingual_model_path: "~/Developer/whisper.cpp/models/ggml-small.bin"
+  # Runs a second, continuous whisper-stream process (multilingual, -l pt)
+  # alongside the main English one, same capture device, so Portuguese
+  # speech is recognized and translated live -- same pattern as the
+  # existing English pipeline. Real CPU cost (a second continuous
+  # whisper.cpp process); set false to fall back to the manual "Falar em
+  # português" button only.
+  enable_portuguese_stream: true
+
+ollama:
+  base_url: "http://127.0.0.1:11434"
+  # Benchmarked against the real MeetingCoachResponse schema + a realistic
+  # prompt size: 30.4s vs 42.7s for qwen3:4b, correct PT-BR output
+  # (qwen2.5:3b failed, phi3.5:3.8b had a language bug). If coaching
+  # quality regresses in real use, try a different local model here.
+  model: "llama3.2:3b"
+  think: false
+  temperature: 0.2
+  context_tokens: 4096
+  request_timeout_seconds: 90
+
+summarization:
+  enabled: true
+  interval_seconds: 180
+  max_summary_characters: 2500
+
+translation:
+  enabled: true
+  # No interval_seconds/min_new_characters here -- translation fires per
+  # transcript segment (every ~step_ms), not in batches, for the lowest
+  # latency the pipeline can give. "argos": dedicated local NMT
+  # (argostranslate/CTranslate2), not an LLM -- fast (~0.0-0.1s vs
+  # 15-25s for an LLM path) but its only en->pt package is European
+  # Portuguese, not Brazilian (confirmed empirically: "boleia"/"casa de
+  # banho"/"comboio"/"equipa", none of it what a Brazilian would say).
+  # "opus_mt": Helsinki-NLP OPUS-MT models, same CTranslate2 engine
+  # (same speed class, no new runtime dependency) but with a real
+  # Brazilian target -- see context/opus_mt.py. Default here for that
+  # reason; an LLM-based path (engine="ollama") was also tried and
+  # reverted for reliability (~50% of translations came back malformed
+  # with a small enough model to be fast).
+  engine: "opus_mt"
+  # Only used when engine="ollama" above. Empty string = fall back to
+  # ollama.model.
+  model: ""
+
+ui:
+  transcript_max_lines: 20
+  font_scale: 1.0
+  show_grammar_explanation: true
+  auto_scroll: true
+
+automation:
+  detect_direct_questions: true
+  auto_generate_answer: false
+  # Add your own name here -- someone saying it in the meeting is a
+  # strong "this question is for you" signal, on top of the phrases below.
+  trigger_phrases:
+    - "What do you think"
+    - "Do you agree"
+    - "Any concerns"
+    - "Could you explain"
+    - "What is your view"

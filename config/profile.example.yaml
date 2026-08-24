@@ -1,0 +1,50 @@
+# Copy this file to config/profile.yaml and fill in your own details.
+# config/profile.yaml is gitignored -- it's meant to hold your real name
+# and expertise, not something committed to source control.
+
+user:
+  name: "Your Name"
+  role: "Your Role (e.g. Solution Architect, Product Manager, Backend Engineer)"
+  native_language: pt-BR
+  meeting_language: en
+  english_level: intermediate
+
+# The coach uses this list to recognize and preserve your domain's
+# technical vocabulary instead of translating it. Replace with your own
+# stack/domain -- the example below is illustrative, not required.
+expertise:
+  - enterprise architecture
+  - cloud computing
+  - AWS
+  - Kubernetes
+  - APIs
+  - integration
+  - event-driven architecture
+  - security
+  - DevOps
+  - Infrastructure as Code
+  - observability
+  - artificial intelligence
+
+answer_preferences:
+  context_language: pt-BR
+  spoken_suggestion_language: en-US
+  maximum_spoken_sentences: 2
+  prefer_short_sentences: true
+  easy_pronunciation: true
+  preserve_technical_terms_in_english: true
+  challenge_architectural_assumptions: true
+  avoid_unnecessary_jargon: false
+
+analysis_dimensions:
+  - architecture
+  - security
+  - integration
+  - scalability
+  - availability
+  - resilience
+  - operability
+  - observability
+  - cost
+  - maintainability
+  - compliance

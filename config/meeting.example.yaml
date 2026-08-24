@@ -1,0 +1,35 @@
+# Copy this file's contents into the "Prepare meeting" screen (or POST it to
+# PUT /api/config/meeting) before a session starts. It is valid only for the
+# current session and is never persisted unless the user explicitly saves it.
+
+meeting:
+  title: "Architecture Review - Event Integration"
+  objective: "Validar a arquitetura de integração orientada a eventos"
+  agenda:
+    - "Current architecture"
+    - "Target architecture"
+    - "Security"
+    - "Observability"
+    - "Migration plan"
+  expected_topics:
+    - "Kafka"
+    - "Amazon MSK"
+    - "API Gateway"
+    - "Kubernetes"
+    - "mTLS"
+    - "OAuth 2.0"
+  known_systems:
+    - "Producer API"
+    - "Event broker"
+    - "Downstream consumers"
+  known_acronyms:
+    - "MSK"
+    - "EKS"
+    - "DLQ"
+    - "IaC"
+  desired_outcome: "Identificar riscos e decisões pendentes"
+  response_tone: "professional-simple"
+  english_variant: "en-US"
+  context_output_language: "pt-BR"
+  expected_speakers: []
+  notes: "Preservar termos técnicos em inglês."

@@ -1,0 +1,3 @@
+We are considering moving the workload to Kubernetes, but we have not
+defined how retries, authentication, observability, and operational ownership
+will work. Each consumer may implement its own retry policy.

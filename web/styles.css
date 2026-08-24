@@ -1,0 +1,961 @@
+:root {
+  /* Deep blue-black instead of neutral gray-black -- reads as intentional
+     rather than "default dark mode". */
+  --bg: #0a0d16;
+  --bg-glow: radial-gradient(ellipse 900px 420px at 20% -10%, rgba(91, 140, 255, 0.14), transparent 60%),
+             radial-gradient(ellipse 700px 380px at 100% 0%, rgba(255, 159, 91, 0.08), transparent 55%);
+  --panel: #141824;
+  --panel-raised: #1a1f2e;
+  --panel-border: #2b3142;
+  --text: #eef1f8;
+  --text-dim: #9aa3b8;
+  --accent: #5b8cff;
+  --accent-dark: #3e6bdb;
+  --accent-warm: #ffb454;
+  --danger: #e5484d;
+  --ok: #34d399;
+  --warn: #f5a623;
+  /* Palette, reduced 2026-08-13 (was one hue per panel -- transcript,
+     translation, feed, coach, pt-live, five all visible together, which
+     read as competing rather than organized once every panel was on
+     screen at once). Down to four FUNCTIONAL colors used consistently
+     everywhere, plus one identity color reserved for a single specific
+     context: blue (--accent) = interaction/selection, green (--ok) =
+     system healthy, orange (--warn) = needs attention, red (--danger) =
+     destructive/error. --accent-coach (purple) is the one exception,
+     and only appears while the Language Coach drawer is actually open
+     -- not a permanent panel color, an entrance cue for a specific mode. */
+  --accent-coach: #b47bff;
+  --font-scale: 1;
+  /* Type system -- three roles, all system faces (no network fetch --
+     stays local-first/offline-first):
+     - --font-ui: the existing sans, for chrome/controls/prose.
+     - --font-display: a serif, panel titles/app name/modal headings only.
+     - --font-mono: verbatim captured speech (transcript + translation +
+       the session timer) -- "what was literally said" reads like a
+       stenography instrument, distinct from coach prose (--font-ui). */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-display: ui-serif, "New York", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Typographic scale by COGNITIVE importance, not by section -- added
+     2026-08-13. The thing you need to say out loud right now is the
+     biggest text on the screen; a caption is the smallest. Previously
+     every category of text was close to the same 15px body size, so
+     visual weight didn't track what actually mattered most in the
+     moment. */
+  --fs-immediate: 19px;   /* the suggested English line you're about to say */
+  --fs-transcript: 16px;  /* live English transcript */
+  --fs-pt: 15px;          /* PT-BR translation/paired line */
+  --fs-meta: 11.5px;      /* timestamps, labels, confidence, status */
+
+  /* Design tokens: spacing/radius/shadow/recessed-surface, one small
+     token set instead of ad hoc repeated values. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 28px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.15s var(--ease);
+  --surface-recessed: #10131a;
+  --surface-hover: #232838;
+}
+
+* { box-sizing: border-box; }
+
+/* html/body pinned to exactly the viewport height, 2026-08-13 -- real bug,
+   reported directly: as the conversation/response feed grew, the whole
+   PAGE grew taller than the viewport instead of the individual boxes
+   scrolling internally (`.layout` only had `min-height`, a floor with
+   no ceiling). That meant the topbar/context-actions-bar scrolled out
+   of view as content piled up ("os menus desaparecem totalmente
+   quando as conversa vao acontecendo"), and the "latest line" wasn't
+   reliably the one in view ("as caixas precisam estar sempre mostrando
+   a ultima conversa") -- the page's own scroll position, not any
+   individual box's, was what had to move. Fix: body is the ONE
+   scroll-less flex column filling 100% of the viewport; every
+   genuinely growing region below it (#transcript, .response-feed,
+   .pt-live-compact-feed) is the thing that scrolls, and it always
+   scrolls itself to the bottom on new content (addConversationEntry /
+   appendPtLiveTranslatedText in web/app.js) -- so the newest line is
+   always what's in view without the user or the topbar/action bar
+   ever having to move. */
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-glow), var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: calc(15px * var(--font-scale));
+}
+
+.hidden { display: none !important; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 5, 9, 0.72);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.overlay-card {
+  background: linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 28px;
+  max-width: 480px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-border) transparent;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.overlay-card::-webkit-scrollbar { width: 10px; }
+.overlay-card::-webkit-scrollbar-track { background: transparent; }
+.overlay-card::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 5px; }
+.overlay-card::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+.overlay-card.wide { max-width: 640px; }
+
+.overlay-card h2 { margin-top: 0; font-family: var(--font-display); font-weight: 600; font-size: 1.4em; letter-spacing: -0.01em; }
+.privacy-note { color: var(--text-dim); font-size: 0.9em; }
+.privacy-note-warning { color: var(--warn); border: 1px solid var(--warn); border-radius: 6px; padding: 8px 10px; }
+
+.overlay-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn {
+  border: none;
+  border-radius: 9px;
+  padding: 10px 16px;
+  font-size: 0.95em;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+.btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-dark)); color: white; box-shadow: 0 2px 10px rgba(91, 140, 255, 0.35); }
+.btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(91, 140, 255, 0.45); }
+.btn-secondary { background: var(--panel-raised); color: var(--text); border: 1px solid var(--panel-border); }
+.btn-secondary:hover { background: var(--surface-hover); border-color: var(--accent); transform: translateY(-1px); }
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--panel-border); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: var(--danger); color: white; box-shadow: 0 2px 10px rgba(229, 72, 77, 0.3); }
+.btn-danger:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(229, 72, 77, 0.4); }
+.btn-danger-ghost { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+.btn-tiny { background: var(--panel-raised); color: var(--text-dim); padding: 4px 8px; font-size: 0.75em; border-radius: 6px; border: 1px solid transparent; }
+.btn-tiny:hover { color: var(--text); border-color: var(--panel-border); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+.btn:focus-visible, .action-btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.icon-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: var(--surface-recessed);
+  color: var(--text-dim);
+  font-size: 0.72em;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast);
+}
+.icon-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(91, 140, 255, 0.1);
+  transform: scale(1.08);
+}
+
+/* -- topbar: 2026-08-13 redesign ---------------------------------------
+   Previously two rows (title/actions, then a permanent statusbar with
+   4 always-visible technical status pills) -- "muita infraestrutura
+   aparecendo... isso é observabilidade técnica, não experiência do
+   usuário" (direct feedback). Down to one row: app name, a listening
+   indicator + timer, and a health warning that appears ONLY when
+   something is actually broken (see updateHealthWarning() in app.js).
+   The 4 raw status signals still exist in the DOM (.overflow-status-list
+   below) for anyone who wants them -- moved into the ••• menu, not
+   deleted, just no longer permanent chrome. */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--panel-border);
+  flex-wrap: wrap;
+  gap: 10px;
+  position: relative;
+  /* Pinned size within body's flex column (see the html/body comment) --
+     never scrolls out of view, whatever the conversation/assistant
+     columns do internally below it. */
+  flex: 0 0 auto;
+}
+.app-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-style: italic;
+  font-size: 1.35em;
+  margin-right: 10px;
+  letter-spacing: -0.005em;
+  background: linear-gradient(120deg, var(--accent) 0%, var(--accent-warm) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.topbar-title { display: flex; align-items: center; }
+.badge { padding: 3px 10px; border-radius: 999px; font-size: 0.7em; font-weight: 700; letter-spacing: 0.05em; }
+/* "LOCAL" not "OFFLINE" (2026-08-13) -- "offline" reads as "disconnected
+   / not working" at a glance; "local" communicates the actual, desired
+   property (nothing leaves this machine) without the negative framing. */
+.badge-local { background: rgba(52, 211, 153, 0.12); color: var(--ok); border: 1px solid var(--ok); }
+.badge-question { background: var(--warn); color: #201400; margin-top: 8px; display: inline-block; }
+.badge-recording { background: var(--danger); color: #fff; }
+/* Proactive noticing flag (theory #2) -- deliberately NOT warn/danger:
+   this is a learning opportunity, not an alert, so it uses the neutral
+   accent tone and looks clickable (it is -- opens the explanation). */
+.badge-noticing {
+  background: var(--accent);
+  color: #0b0d12;
+  margin-top: 8px;
+  display: inline-block;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.topbar-status { display: flex; align-items: center; gap: 14px; }
+.listening-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--ok);
+  text-transform: uppercase;
+}
+.listening-indicator::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
+}
+.status-timer {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 600;
+}
+.health-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  font-size: 0.78em;
+  font-weight: 600;
+}
+.topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.menu-toggle { font-size: 0.85em; letter-spacing: 0.1em; }
+
+/* -- overflow menu (•••): everything that isn't "what do I need right
+   now" -- prepare meeting, Language Coach entry point, microphone
+   picker, raw technical status, delete session. Replaces the old
+   always-visible topbar-actions row + statusbar. */
+.overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 20px;
+  z-index: 40;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.88em;
+  font-family: inherit;
+}
+.overflow-item:hover { background: var(--surface-hover); }
+.overflow-item-danger { color: var(--danger); }
+.overflow-item-static { padding: 6px 10px; font-size: 0.8em; cursor: default; }
+.overflow-divider { height: 1px; background: var(--panel-border); margin: 4px 6px; }
+.overflow-status-list { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px; font-size: var(--fs-meta); color: var(--text-dim); }
+.overflow-status-list strong { color: var(--text); font-weight: 600; }
+.overflow-menu .audio-device-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: default;
+}
+.overflow-menu .audio-device-picker .panel-sub { font-size: 0.85em; }
+.overflow-menu .audio-device-picker select {
+  background: var(--surface-recessed);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 0.95em;
+}
+.overflow-menu .audio-device-picker select:disabled { opacity: 0.5; }
+.badge-count {
+  display: inline-block;
+  background: var(--accent);
+  color: #0b0d12;
+  border-radius: 999px;
+  min-width: 18px;
+  padding: 0 6px;
+  font-size: 0.75em;
+  font-weight: 700;
+  text-align: center;
+  margin-left: auto;
+}
+.status-item { display: inline-flex; align-items: center; gap: 6px; }
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a5065;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.status-dot[data-tone="ok"] { background: var(--ok); box-shadow: 0 0 6px rgba(52, 211, 153, 0.6); }
+.status-dot[data-tone="warn"] { background: var(--warn); box-shadow: 0 0 6px rgba(245, 166, 35, 0.6); }
+.status-dot[data-tone="error"] { background: var(--danger); box-shadow: 0 0 6px rgba(229, 72, 77, 0.6); }
+
+/* -- main layout: 2026-08-13 rewrite. Two zones, not several small
+   panels or a sidebar of modules -- "a interface principal deve
+   responder: o que eu preciso saber ou fazer agora, não qual módulo eu
+   quero abrir" (direct feedback; see docs/DECISIONS.md for the full
+   design rationale and what it replaced). ~65/35 conversation/assistant
+   split by default, adjustable by hand via the one resize handle
+   between them (web/resize.js -- same mechanism as before, just one
+   handle doing the one split that actually matters now instead of five
+   handles splitting five panels). */
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) 20px var(--space-5);
+  /* flex: 1 (not min-height) -- fills exactly what's left of body's
+     viewport-height flex column below .topbar, and can shrink
+     (min-height: 0) instead of forcing the page taller than the
+     viewport. See the html/body comment above for the full reasoning. */
+  flex: 1;
+  min-height: 0;
+}
+.workspace {
+  display: flex;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+}
+.conversation-column { flex: 65 1 0; min-width: 0; }
+/* No overflow-y here (removed 2026-08-13) -- .respond-now-block's own
+   .response-feed below is the one region meant to scroll; letting this
+   column ALSO scroll competed with that and could leave the response
+   feed never actually height-constrained enough to activate its own
+   scrollbar. min-height: 0 is what actually matters here -- it's what
+   lets .respond-now-block's `flex: 1` mean something real instead of
+   growing to content size like a block element would. */
+.assistant-column { flex: 35 1 0; min-width: 0; }
+
+.panel {
+  background: linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 16px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.22);
+  --panel-accent: var(--accent);
+}
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--panel-accent);
+  opacity: 0.75;
+}
+.panel h3 {
+  margin: 0 0 10px 0;
+  font-family: var(--font-display);
+  font-size: 0.92em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: var(--panel-accent);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.panel-sub { font-family: var(--font-ui); font-size: 0.78em; letter-spacing: normal; text-transform: none; color: var(--text-dim); font-weight: 400; }
+.panel h4 { margin: 0 0 8px; font-size: 0.75em; color: var(--text-dim); letter-spacing: 0.04em; font-weight: 600; text-transform: uppercase; }
+
+.scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: scroll;
+  line-height: 1.5;
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-border) transparent;
+}
+.scroll-area::-webkit-scrollbar { width: 10px; }
+.scroll-area::-webkit-scrollbar-track { background: transparent; }
+.scroll-area::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 5px; }
+.scroll-area::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+.feed-empty-hint { color: var(--text-dim); font-size: 0.9em; }
+
+/* -- drag-to-resize handle (web/resize.js) -- just the one workspace
+   split now. Deliberately LOUD (solid always-visible bar + grip mark,
+   not hover-only) -- an earlier, subtler version went unnoticed. */
+.resize-handle { flex: 0 0 auto; position: relative; z-index: 2; }
+.resize-handle::before {
+  content: "";
+  position: absolute;
+  background: var(--panel-border);
+  opacity: 0.55;
+  border-radius: 3px;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+.resize-handle::after {
+  content: "⋮";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+}
+.resize-handle:hover::before, .resize-handle:active::before { opacity: 1; background: var(--accent); }
+.resize-handle-column {
+  width: 16px;
+  margin: 0 -4px;
+  align-self: stretch;
+  cursor: col-resize;
+  touch-action: none;
+}
+.resize-handle-column::before { top: 35%; bottom: 35%; left: 50%; width: 6px; transform: translateX(-50%); }
+body.is-resizing-col { cursor: col-resize; user-select: none; }
+
+/* -- conversation timeline: English heard + PT-BR translation, paired
+   in one entry per segment instead of two separate scrolling panels.
+   2026-08-13 -- direct feedback: reading English then hunting in a
+   different panel for the matching Portuguese, then back, is real
+   unnecessary eye/attention movement every single line. Data/events
+   stay exactly as independent as before (transcript.segment and
+   translation.update are still two separate WebSocket events, see
+   addConversationEntry/fillNextConversationTranslation in web/app.js)
+   -- only the visual grouping changed. */
+#transcript { font-family: var(--font-mono); white-space: normal; }
+.conversation-entry {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+.conversation-entry:last-child { border-bottom: none; }
+.conversation-entry-time {
+  display: block;
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+.conversation-entry-en {
+  font-size: var(--fs-transcript);
+  line-height: 1.5;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 2px;
+  flex-wrap: wrap;
+}
+.conversation-entry-pt {
+  font-size: var(--fs-pt);
+  line-height: 1.5;
+  color: var(--text-dim);
+  opacity: 0.85;
+  margin: 0;
+}
+.conversation-entry-pt-pending { font-style: italic; opacity: 0.5; }
+/* "AGORA": one-shot highlight on the newest entry, never a loop/pulse
+   (ADHD_NEUROSCIENCE_REFERENCE.md rule #2) -- settles back to a normal
+   entry the instant the next one arrives (addConversationEntry). */
+.conversation-entry-current {
+  background: linear-gradient(90deg, rgba(91, 140, 255, 0.08), transparent);
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+  margin-left: -11px;
+}
+.conversation-entry-current .conversation-entry-en { color: var(--text); }
+.pause-marker { color: var(--text-dim); font-size: var(--fs-meta); text-align: center; margin: 4px 0; opacity: 0.7; }
+
+/* Contextual "?"/"🗣️" on each English line -- see
+   docs/LANGUAGE_COACH_ARCHITECTURE.md's UX section: the single most
+   important Language Coach affordance, because it keeps every
+   explanation tied to something real just heard. */
+.explain-sentence-btn, .pronounce-sentence-btn { margin-left: 2px; }
+
+/* -- assistant column: response feed + compact PT-live + inline idea box */
+/* flex: 1 -- this is the one section in the Assistant column meant to
+   grow/scroll (response cards can pile up); pt-live-compact and
+   idea-box-inline below are `flex: 0 0 auto`, pinned to their content
+   size, so all available extra height goes to the response feed. */
+.respond-now-block { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.response-feed { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+
+/* Given real visual weight, 2026-08-13 (was a plain thin section below
+   a divider line, same weight as any other secondary block) -- direct
+   feedback: "o botao de traducao do portugues para o ingles precisa
+   estar mais em foco". This is one of the app's two live speech
+   pipelines, not a footnote -- a highlighted card (accent border +
+   raised background), a colored uppercase label, and translated text
+   sized close to the response cards' own immediate-answer size make it
+   read as a primary, always-on feature instead of something tucked
+   away under Responder Agora. */
+.pt-live-compact {
+  margin-top: 14px;
+  flex: 0 0 auto;
+  background: var(--surface-recessed);
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 10px 12px 12px;
+}
+.pt-live-compact-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pt-live-compact-header h4 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.8em;
+  letter-spacing: 0.05em;
+}
+.pt-live-pause-btn { flex-shrink: 0; }
+/* Ouvido (PT) | Traduzido (EN), side by side and both always visible --
+   2026-08-13, restored after direct feedback that collapsing "Ouvido"
+   behind a <details> read as the Portuguese having been removed
+   entirely ("voce tirou a traducao do Portugues, coloque novamente").
+   Traduzido keeps the larger/brighter treatment (it's the actionable
+   half -- what to actually say), Ouvido stays visible but quieter, same
+   relationship as the main conversation timeline's EN/PT pairing. */
+.pt-live-columns { display: flex; gap: 12px; }
+.pt-live-column { flex: 1; min-width: 0; }
+.pt-live-column-label {
+  display: block;
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.pt-live-compact-feed {
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs-transcript) + 1px);
+  line-height: 1.55;
+}
+.pt-live-translated-line { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; flex-wrap: wrap; }
+.pt-live-heard-feed {
+  font-family: var(--font-mono);
+  font-size: var(--fs-pt);
+  color: var(--text-dim);
+  line-height: 1.5;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.pt-live-heard-feed p { margin: 0 0 8px; }
+
+.idea-box-inline { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--panel-border); flex: 0 0 auto; }
+.idea-box-inline label { display: block; margin-bottom: 8px; color: var(--accent-warm); font-weight: 600; font-size: 0.85em; }
+.idea-box-inline label .panel-sub { display: block; font-weight: 400; margin-top: 2px; }
+.idea-row { display: flex; gap: 8px; }
+#idea-input {
+  flex: 1;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--surface-recessed);
+  color: var(--text);
+  font-size: 0.95em;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+#idea-input:focus-visible { border-color: var(--accent-warm); box-shadow: 0 0 0 3px rgba(255, 180, 84, 0.15); outline: none; }
+.idea-translation-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--surface-recessed);
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent-warm);
+  border-radius: 8px;
+}
+.idea-translation-text { margin: 0; flex: 1; }
+
+/* -- context actions bar: the 7 coach actions, contextual bar + overflow
+   instead of 7 permanent cards -- "Responder Perguntar Discordar
+   Clarificar •••", Cmd+1-7 unchanged for everything including the ones
+   tucked in •••. */
+.context-actions-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  flex-wrap: wrap;
+  position: relative;
+  /* Pinned size within .layout's flex column -- never scrolls away as
+     .workspace's content grows (see the html/body comment above). */
+  flex: 0 0 auto;
+}
+.action-btn {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: 9px 14px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+.action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(91, 140, 255, 0.18);
+}
+.action-btn[data-tooltip]:hover::after,
+.action-btn[data-tooltip]:focus-visible::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 220px;
+  max-width: 60vw;
+  background: #000;
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.75em;
+  line-height: 1.4;
+  font-weight: 400;
+  white-space: normal;
+  z-index: 15;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.more-actions-toggle { margin-left: auto; }
+.more-actions-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 14px;
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  z-index: 30;
+}
+.more-actions-menu .action-btn { text-align: left; }
+
+/* -- response feed: one independent card per action click ------------- */
+
+.response-card {
+  background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.response-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.response-card-action {
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.response-card-time { flex: 1; }
+.response-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+}
+.response-card-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.response-card[data-state="loading"] .response-card-status,
+.response-card[data-state="retrieval"] .response-card-status { color: var(--warn); }
+.response-card[data-state="ready"] .response-card-status { color: var(--ok); }
+.response-card[data-state="error"] .response-card-status { color: var(--danger); }
+
+.response-card-spinner { color: var(--text-dim); font-size: 0.85em; padding: 10px 0; }
+.response-card-error { color: var(--danger); font-size: 0.9em; }
+
+/* Immediate layer: the actual thing you need to say, sized to match its
+   cognitive importance (--fs-immediate, the largest text in the app
+   outside the app name). */
+.response-card-immediate { margin-bottom: 2px; }
+.context-pt { line-height: 1.5; margin-bottom: 8px; }
+.suggestion-text, .suggested-answer, .suggested-question {
+  font-size: var(--fs-immediate);
+  line-height: 1.5;
+  margin: 0 0 6px;
+  color: var(--text);
+}
+.suggestion-opening, .simple-opening { color: var(--text-dim); margin: 0 0 10px; font-style: italic; font-size: 0.85em; }
+.response-card-cta-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.insufficient-context-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 0.8em;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* Progressive disclosure: confidence, evidence, vocabulary, grammar
+   note, feedback buttons -- all still exist, none deleted, just behind
+   one click instead of shown before anyone asked "why this answer".
+   2026-08-13, direct feedback: "seu card atual mostra muita informação
+   simultaneamente... ótimo para análise posterior, ruim para 'preciso
+   falar agora'". Confidence specifically no longer shown at rest either
+   (see .insufficient-context-warning above for the one case that IS
+   surfaced immediately, because it's actually actionable -- "HIGH"
+   alone never was). */
+.response-card-why { margin-top: 10px; border-top: 1px solid var(--panel-border); padding-top: 8px; }
+.response-card-why summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.82em;
+  font-weight: 600;
+  list-style: none;
+}
+.response-card-why summary::-webkit-details-marker { display: none; }
+.response-card-why summary::after { content: " ›"; }
+.response-card-why[open] summary::after { content: " ⌄"; }
+.grammar-note { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--panel-border); color: var(--text-dim); }
+.response-card-details { margin-top: 10px; font-size: 0.85em; color: var(--text-dim); }
+.response-card-details summary { cursor: pointer; color: var(--text); }
+.response-card-details ul { margin: 6px 0 0 18px; padding: 0; }
+.confidence { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 10px; }
+.confidence.low { color: var(--danger); }
+.confidence.medium { color: var(--warn); }
+.confidence.high { color: var(--ok); }
+.processing-load { font-size: var(--fs-meta); color: var(--text-dim); margin-top: 6px; }
+.feedback-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+/* -- Language Coach drawer, replaces the old always-visible panel/tab.
+   2026-08-13: "fica mais poderoso justamente ficando menos visível" --
+   during a live meeting the full Q&A/scenario/pronunciation/spaced-
+   repetition surface doesn't need to compete for permanent screen
+   space; "🎓 Aprender esta frase" (bottom action bar) and the "?" on
+   any transcript line both open this on demand. Purple (--accent-coach)
+   is intentionally scoped to ONLY this drawer while open -- not a
+   permanent panel color the way it used to be. */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 5, 9, 0.55);
+  z-index: 44;
+}
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(480px, 92vw);
+  background: linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 100%);
+  border-left: 1px solid var(--panel-border);
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow-y: auto;
+  --panel-accent: var(--accent-coach);
+}
+.drawer-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.drawer-header h3 {
+  margin: 0;
+  color: var(--accent-coach);
+  font-family: var(--font-display);
+  font-size: 1.05em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.drawer-subtitle { margin: 0 0 14px; }
+
+.language-coach-ask-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.language-coach-ask-row input {
+  flex: 1;
+  background: var(--surface-recessed);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 0.95em;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.language-coach-ask-row input:focus-visible { outline: none; border-color: var(--accent-coach); box-shadow: 0 0 0 3px rgba(180, 123, 255, 0.15); }
+.language-coach-review-row { margin-bottom: 8px; }
+.language-coach-review-panel { background: var(--surface-recessed); border: 1px solid var(--panel-border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.lc-review-context { font-style: italic; color: var(--text-dim); margin-bottom: 8px; }
+.lc-review-chunk { font-size: 1.1em; font-weight: 600; color: var(--accent-coach); margin-bottom: 10px; }
+.lc-review-actions { display: flex; gap: 8px; }
+.language-coach-feed { display: flex; flex-direction: column; gap: 10px; }
+
+/* Tone rule: pronunciation/grammar feedback never gets red/error
+   styling, even on a "needs_work" card -- see the pedagogy doc's
+   Affective Filter Hypothesis section. Only genuine request failures
+   (.response-card-error) use --danger. */
+.lc-source-sentence { font-size: 0.85em; color: var(--text-dim); border-left: 2px solid var(--accent-coach); padding-left: 10px; margin-bottom: 10px; font-style: italic; }
+.lc-explanation { margin-bottom: 10px; line-height: 1.55; }
+.lc-native-reasoning { background: var(--surface-recessed); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; line-height: 1.5; font-size: 0.95em; }
+.lc-idiomatic-chunk { display: inline-block; background: rgba(180, 123, 255, 0.14); color: var(--accent-coach); border-radius: 6px; padding: 4px 10px; font-size: 0.85em; margin-bottom: 10px; }
+.lc-phonetic-respelling { font-size: 1.15em; font-weight: 600; color: var(--accent-coach); margin-bottom: 6px; }
+.lc-stress-note { color: var(--text-dim); font-size: 0.9em; margin-bottom: 10px; }
+.lc-follow-up { color: var(--text-dim); font-size: 0.9em; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--panel-border); }
+.lc-scenario-btn, .lc-speak-btn, .lc-add-review-btn, .lc-record-btn { margin-top: 10px; margin-right: 8px; }
+.lc-record-btn.recording { color: var(--accent-coach); border-color: var(--accent-coach); }
+.lc-pronunciation-status { color: var(--text-dim); font-size: 0.9em; margin-top: 10px; }
+.lc-pronunciation-feedback { background: var(--surface-recessed); border-radius: 8px; padding: 10px 12px; margin-top: 10px; line-height: 1.5; font-size: 0.95em; }
+.lc-pronunciation-heard { color: var(--text-dim); font-style: italic; margin-bottom: 6px; }
+.lc-pronunciation-encouragement { color: var(--accent-coach); margin-top: 6px; }
+.lc-visual-anchor { display: block; font-size: 2.2em; line-height: 1; margin-bottom: 8px; }
+.lc-review-feedback { background: var(--surface-recessed); border-left: 3px solid var(--accent-coach); border-radius: 8px; padding: 10px 12px; margin-top: 10px; line-height: 1.5; font-size: 0.9em; color: var(--text); }
+
+/* Retrieval-practice-first prompt (see the HTML comment above
+   .lc-retrieval-prompt in index.html for the pedagogical reasoning). */
+.lc-retrieval-prompt { background: var(--surface-recessed); border-radius: var(--radius-md); padding: 14px; }
+.lc-retrieval-sentence { font-size: 0.85em; color: var(--text-dim); border-left: 2px solid var(--accent-coach); padding-left: 10px; margin-bottom: 10px; font-style: italic; }
+.lc-retrieval-question { margin: 0 0 10px; line-height: 1.5; }
+.lc-retrieval-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.95em;
+  margin-bottom: 10px;
+}
+.lc-retrieval-input:focus-visible { outline: none; border-color: var(--accent-coach); box-shadow: 0 0 0 3px rgba(180, 123, 255, 0.15); }
+.lc-retrieval-actions { display: flex; gap: 8px; }
+
+#meeting-form label { display: block; margin-bottom: 14px; font-size: 0.85em; color: var(--text-dim); font-weight: 600; }
+#meeting-form input, #meeting-form textarea {
+  width: 100%; margin-top: 6px; padding: 9px 10px; border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border); background: var(--surface-recessed); color: var(--text); font-family: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+#meeting-form input:hover, #meeting-form textarea:hover { border-color: var(--surface-hover); }
+#meeting-form input:focus-visible, #meeting-form textarea:focus-visible {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.15);
+}
+
+@media (max-width: 900px) {
+  /* Narrow screens: stack the two zones instead of splitting width,
+     each with a real height budget + scroll; no shared flex-grow
+     budget left to redistribute, so the resize handle has nothing to
+     drag against. */
+  .layout { min-height: 0; }
+  /* overflow-y: auto here specifically -- body is overflow:hidden now
+     (see that comment above), so on a narrow screen where the two fixed
+     vh heights below plus topbar/action-bar chrome add up to slightly
+     more than the viewport, .workspace needs to be able to scroll
+     itself rather than the excess being clipped with nothing to
+     scroll it into view. */
+  .workspace { flex-direction: column; overflow-y: auto; }
+  .conversation-column { flex: none; height: 46vh; }
+  .assistant-column { flex: none; height: 44vh; }
+  .resize-handle { display: none; }
+  .drawer { width: 100%; }
+  .overflow-menu { left: 12px; right: 12px; min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+  .btn:hover, .action-btn:hover, .icon-btn:hover, .btn-secondary:hover {
+    transform: none !important;
+  }
+}

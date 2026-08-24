@@ -1,0 +1,265 @@
+terms:
+  API Gateway:
+    preserve: true
+    description_pt: "Gateway de APIs"
+  EKS:
+    preserve: true
+    expansion: "Amazon Elastic Kubernetes Service"
+  AKS:
+    preserve: true
+    expansion: "Azure Kubernetes Service"
+  MSK:
+    preserve: true
+    expansion: "Amazon Managed Streaming for Apache Kafka"
+  DLQ:
+    preserve: true
+    expansion: "Dead-Letter Queue"
+  IaC:
+    preserve: true
+    expansion: "Infrastructure as Code"
+  mTLS:
+    preserve: true
+    expansion: "mutual TLS"
+  OAuth 2.0:
+    preserve: true
+  OpenID Connect:
+    preserve: true
+  workload identity:
+    preserve: true
+  service mesh:
+    preserve: true
+  event sourcing:
+    preserve: true
+  event-driven architecture:
+    preserve: true
+  zero trust:
+    preserve: true
+  OpenTelemetry:
+    preserve: true
+
+  # --- AWS ---
+  IAM:
+    preserve: true
+    expansion: "Identity and Access Management"
+  VPC:
+    preserve: true
+    expansion: "Virtual Private Cloud"
+  EC2:
+    preserve: true
+    expansion: "Elastic Compute Cloud"
+  S3:
+    preserve: true
+    expansion: "Simple Storage Service"
+  KMS:
+    preserve: true
+    expansion: "Key Management Service"
+  Lambda:
+    preserve: true
+    expansion: "AWS serverless compute"
+  RDS:
+    preserve: true
+    expansion: "Relational Database Service"
+  DynamoDB:
+    preserve: true
+    expansion: "AWS managed NoSQL database"
+  EventBridge:
+    preserve: true
+    expansion: "AWS managed event bus"
+  STS:
+    preserve: true
+    expansion: "Security Token Service (temporary credentials)"
+  SCP:
+    preserve: true
+    expansion: "Service Control Policy (AWS Organizations)"
+  ALB:
+    preserve: true
+    expansion: "Application Load Balancer"
+  NLB:
+    preserve: true
+    expansion: "Network Load Balancer"
+
+  # --- Azure ---
+  Entra ID:
+    preserve: true
+    expansion: "Azure identity provider (formerly Azure AD)"
+  VNet:
+    preserve: true
+    expansion: "Azure Virtual Network"
+  Key Vault:
+    preserve: true
+    expansion: "Azure secrets/certificate/key management"
+  APIM:
+    preserve: true
+    expansion: "Azure API Management"
+  NSG:
+    preserve: true
+    expansion: "Network Security Group (Azure firewall rules)"
+  Managed Identity:
+    preserve: true
+    expansion: "Azure workload identity without stored credentials"
+  ExpressRoute:
+    preserve: true
+    expansion: "Azure private dedicated network connection"
+
+  # --- GCP ---
+  GKE:
+    preserve: true
+    expansion: "Google Kubernetes Engine"
+  Cloud Run:
+    preserve: true
+    expansion: "GCP serverless containers"
+  Pub/Sub:
+    preserve: true
+    expansion: "GCP managed messaging service"
+  Cloud Armor:
+    preserve: true
+    expansion: "GCP WAF / DDoS protection"
+  BigQuery:
+    preserve: true
+    expansion: "GCP serverless data warehouse"
+  Workload Identity Federation:
+    preserve: true
+    expansion: "GCP keyless workload authentication"
+
+  # --- Oracle Cloud ---
+  OCI:
+    preserve: true
+    expansion: "Oracle Cloud Infrastructure"
+  VCN:
+    preserve: true
+    expansion: "Virtual Cloud Network (OCI)"
+  OKE:
+    preserve: true
+    expansion: "Oracle Kubernetes Engine"
+  FastConnect:
+    preserve: true
+    expansion: "OCI private dedicated network connection"
+
+  # --- Network & security ---
+  TLS:
+    preserve: true
+    expansion: "Transport Layer Security"
+  PKI:
+    preserve: true
+    expansion: "Public Key Infrastructure"
+  CA:
+    preserve: true
+    expansion: "Certificate Authority"
+  CRL:
+    preserve: true
+    expansion: "Certificate Revocation List"
+  OCSP:
+    preserve: true
+    expansion: "Online Certificate Status Protocol"
+  VPN:
+    preserve: true
+    expansion: "Virtual Private Network"
+  IPSec:
+    preserve: true
+    expansion: "Internet Protocol Security"
+  WAF:
+    preserve: true
+    expansion: "Web Application Firewall"
+  IDS/IPS:
+    preserve: true
+    expansion: "Intrusion Detection/Prevention System"
+  SIEM:
+    preserve: true
+    expansion: "Security Information and Event Management"
+  SOC:
+    preserve: true
+    expansion: "Security Operations Center"
+  DDoS:
+    preserve: true
+    expansion: "Distributed Denial of Service"
+  CSPM:
+    preserve: true
+    expansion: "Cloud Security Posture Management"
+  ZTNA:
+    preserve: true
+    expansion: "Zero Trust Network Access"
+  SASE:
+    preserve: true
+    expansion: "Secure Access Service Edge"
+  SSO:
+    preserve: true
+    expansion: "Single Sign-On"
+  SAML:
+    preserve: true
+    expansion: "Security Assertion Markup Language"
+  JWT:
+    preserve: true
+    expansion: "JSON Web Token"
+  JWKS:
+    preserve: true
+    expansion: "JSON Web Key Set"
+  PKCE:
+    preserve: true
+    expansion: "Proof Key for Code Exchange (OAuth 2.0)"
+  X.509:
+    preserve: true
+    expansion: "digital certificate standard"
+  TLS handshake:
+    preserve: true
+    expansion: "key exchange and cipher negotiation that establishes a secure TLS session"
+  mTLS handshake:
+    preserve: true
+    expansion: "TLS handshake where client and server both present certificates for mutual authentication"
+
+  # --- Open Finance / OpenInsurance (Brazil) ---
+  OpenInsurance Brasil:
+    preserve: true
+    expansion: "SUSEP-regulated open insurance data-sharing ecosystem"
+  Open Finance Brasil:
+    preserve: true
+    expansion: "BCB-regulated open banking/finance data-sharing ecosystem"
+  FAPI:
+    preserve: true
+    expansion: "Financial-grade API security profile"
+  DCR:
+    preserve: true
+    expansion: "Dynamic Client Registration (OAuth 2.0)"
+  SUSEP:
+    preserve: true
+    expansion: "Brazilian private insurance regulator"
+  BCB:
+    preserve: true
+    expansion: "Banco Central do Brasil"
+
+  # --- AI / LLM / multi-agent ---
+  LLM:
+    preserve: true
+    expansion: "Large Language Model"
+  RAG:
+    preserve: true
+    expansion: "Retrieval-Augmented Generation"
+  embeddings:
+    preserve: true
+    expansion: "vector representations of text/data for semantic search"
+  vector database:
+    preserve: true
+    expansion: "database optimized for similarity search over embeddings"
+  fine-tuning:
+    preserve: true
+    expansion: "further training a pretrained model on task-specific data"
+  LoRA:
+    preserve: true
+    expansion: "Low-Rank Adaptation (efficient fine-tuning technique)"
+  RLHF:
+    preserve: true
+    expansion: "Reinforcement Learning from Human Feedback"
+  context window:
+    preserve: true
+    expansion: "maximum tokens an LLM can process in one call"
+  MCP:
+    preserve: true
+    expansion: "Model Context Protocol (standard for connecting LLMs to tools/data)"
+  multi-agent orchestration:
+    preserve: true
+    expansion: "coordinating multiple specialized LLM agents to complete a task"
+  tool calling:
+    preserve: true
+    expansion: "LLM invoking external functions/APIs during inference"
+  agentic workflow:
+    preserve: true
+    expansion: "LLM-driven autonomous multi-step task execution"
